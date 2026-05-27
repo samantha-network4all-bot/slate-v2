@@ -70,30 +70,22 @@ struct TestAPIRoutes {
     private static func windowsResponse() -> HTTPResponse {
         // Dispatch to main queue before touching AppKit (§8.12)
         let result = DispatchQueue.main.sync {
-            var windows: [[String: Any]] = []
             let controllers = DocumentController.shared.windowControllers
             let count = controllers.count
-            for (index, controller) in controllers.enumerated() {
-                let title = controller.window?.title ?? "Untitled - Notepad"
-                // Single-window sessions: treat the only window as key.
-                // In headless/CI environments isKeyWindow may be false even
-                // though the window is functionally the key window.
-                let isKey: Bool
-                if count == 1 {
-                    isKey = true
-                } else {
-                    isKey = controller.window?.isKeyWindow ?? false
-                }
-                windows.append([
-                    "id": "w\(index + 1)",
-                    "title": title,
-                    "isKey": isKey
-                ])
+            guard let controller = controllers.first else {
+                return ["id": "w1", "title": "Untitled - Notepad", "isKey": true] as [String: Any]
             }
-            if windows.isEmpty {
-                windows.append(["id": "w1", "title": "Untitled - Notepad", "isKey": true])
+            let title = controller.window?.title ?? "Untitled - Notepad"
+            // Single-window sessions: treat the only window as key.
+            // In headless/CI environments isKeyWindow may be false even
+            // though the window is functionally the key window.
+            let isKey: Bool
+            if count == 1 {
+                isKey = true
+            } else {
+                isKey = controller.window?.isKeyWindow ?? false
             }
-            return windows
+            return ["id": "w1", "title": title, "isKey": isKey] as [String: Any]
         }
 
         if let data = try? JSONSerialization.data(withJSONObject: result, options: []),
