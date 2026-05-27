@@ -39,22 +39,26 @@ struct TestAPIRoutes {
     }
 
     private static func windowsResponse() -> HTTPResponse {
-        var windows: [[String: Any]] = []
-        let controllers = DocumentController.shared.windowControllers
-        for (index, controller) in controllers.enumerated() {
-            let title = controller.window?.title ?? "Untitled - Notepad"
-            let isKey = controller.window?.isKeyWindow ?? false
-            windows.append([
-                "id": "w\(index + 1)",
-                "title": title,
-                "isKey": isKey
-            ])
-        }
-        if windows.isEmpty {
-            windows.append(["id": "w1", "title": "Untitled - Notepad", "isKey": true])
+        // Dispatch to main queue before touching AppKit (§8.12)
+        let result = DispatchQueue.main.sync {
+            var windows: [[String: Any]] = []
+            let controllers = DocumentController.shared.windowControllers
+            for (index, controller) in controllers.enumerated() {
+                let title = controller.window?.title ?? "Untitled - Notepad"
+                let isKey = controller.window?.isKeyWindow ?? false
+                windows.append([
+                    "id": "w\(index + 1)",
+                    "title": title,
+                    "isKey": isKey
+                ])
+            }
+            if windows.isEmpty {
+                windows.append(["id": "w1", "title": "Untitled - Notepad", "isKey": true])
+            }
+            return windows
         }
 
-        if let data = try? JSONSerialization.data(withJSONObject: windows, options: []),
+        if let data = try? JSONSerialization.data(withJSONObject: result, options: []),
            let json = String(data: data, encoding: .utf8) {
             return HTTPResponse(status: 200, body: json)
         }
