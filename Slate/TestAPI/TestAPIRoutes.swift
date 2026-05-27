@@ -145,6 +145,7 @@ struct TestAPIRoutes {
 
     private static func shutdownResponse() -> HTTPResponse {
         DispatchQueue.main.async {
+            try? FileManager.default.removeItem(atPath: testAPIPortFilePath)
             NSApp.terminate(nil)
         }
         return HTTPResponse(status: 200, body: #"{"ok":true}"#)

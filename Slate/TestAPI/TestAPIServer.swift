@@ -1,10 +1,12 @@
 import Foundation
 import AppKit
 
-private let serverPortFile: String = {
+let testAPIPortFilePath: String = {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     return "\(home)/Library/Application Support/Slate/test-api.port"
 }()
+
+private let serverPortFile: String = testAPIPortFilePath
 
 class TestAPIServer {
 
