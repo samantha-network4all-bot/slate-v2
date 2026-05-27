@@ -84,11 +84,11 @@ struct TestAPIRoutes {
             }
             return nil
         }
-        // No windowId: use key window or first controller
+        // No windowId: use key window or last controller (most recently created)
         if let key = controllers.first(where: { $0.window?.isKeyWindow == true }) {
             return key
         }
-        return controllers.first
+        return controllers.last
     }
 
     // MARK: - GET /text
