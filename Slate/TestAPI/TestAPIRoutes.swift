@@ -144,8 +144,10 @@ struct TestAPIRoutes {
     // MARK: - POST /shutdown
 
     private static func shutdownResponse() -> HTTPResponse {
+        // Remove port file synchronously so the harness detects the process
+        // has exited before we even send the response.
+        try? FileManager.default.removeItem(atPath: testAPIPortFilePath)
         DispatchQueue.main.async {
-            try? FileManager.default.removeItem(atPath: testAPIPortFilePath)
             NSApp.terminate(nil)
         }
         return HTTPResponse(status: 200, body: #"{"ok":true}"#)
