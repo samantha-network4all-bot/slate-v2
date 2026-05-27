@@ -147,7 +147,9 @@ struct TestAPIRoutes {
         // Remove port file synchronously so the harness detects the process
         // has exited before we even send the response.
         try? FileManager.default.removeItem(atPath: testAPIPortFilePath)
-        DispatchQueue.main.async {
+        // Schedule termination after a brief delay so the response is
+        // fully written and the client receives it before the process exits.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             NSApp.terminate(nil)
         }
         return HTTPResponse(status: 200, body: #"{"ok":true}"#)
