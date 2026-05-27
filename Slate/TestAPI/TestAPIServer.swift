@@ -143,17 +143,26 @@ class TestAPIServer {
     }
 
     private func writeResponse(to fd: Int32, response: HTTPResponse) {
-        var msg = "HTTP/1.1 \(response.status) \(response.statusText)\r\n"
-        msg += "Content-Type: application/json\r\n"
-        msg += "Content-Length: \(response.eventualBody.count)\r\n"
-        msg += "Connection: close\r\n"
-        msg += "\r\n"
-        msg += response.body
+        let body: Data
+        if let binary = response.binaryBody {
+            body = binary
+        } else {
+            body = response.eventualBody.data(using: .utf8) ?? Data()
+        }
 
-        if let raw = msg.data(using: .utf8) {
-            raw.withUnsafeBytes { ptr in
-                _ = write(fd, ptr.baseAddress, raw.count)
+        var header = "HTTP/1.1 \(response.status) \(response.statusText)\r\n"
+        header += "Content-Type: \(response.contentType)\r\n"
+        header += "Content-Length: \(body.count)\r\n"
+        header += "Connection: close\r\n"
+        header += "\r\n"
+
+        if let headerData = header.data(using: .utf8) {
+            headerData.withUnsafeBytes { ptr in
+                _ = write(fd, ptr.baseAddress, headerData.count)
             }
+        }
+        body.withUnsafeBytes { ptr in
+            _ = write(fd, ptr.baseAddress, body.count)
         }
     }
 }

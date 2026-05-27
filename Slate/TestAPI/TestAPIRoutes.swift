@@ -6,6 +6,15 @@ import AppKit
 struct HTTPResponse {
     let status: Int
     let body: String
+    let binaryBody: Data?
+    let contentType: String
+
+    init(status: Int, body: String, binaryBody: Data? = nil, contentType: String = "application/json") {
+        self.status = status
+        self.body = body
+        self.binaryBody = binaryBody
+        self.contentType = contentType
+    }
 
     var statusText: String {
         switch status {
@@ -35,14 +44,14 @@ struct TestAPIRoutes {
             return windowsResponse()
 
         case ("GET", "/screenshot"):
-            return screenshotResponse(body: body)
+            return screenshotResponse()
 
         default:
             return HTTPResponse(status: 404, body: #"{"error":"not found"}"#)
         }
     }
 
-    private static func screenshotResponse(body: String?) -> HTTPResponse {
+    private static func screenshotResponse() -> HTTPResponse {
         var pngData: Data?
         DispatchQueue.main.sync {
             guard let controller = DocumentController.shared.windowControllers.first else { return }
@@ -53,9 +62,7 @@ struct TestAPIRoutes {
         }
 
         if let data = pngData {
-            let encoded = data.base64EncodedString()
-            let json = "{\"ok\":true,\"image\":\"" + encoded + "\"}"
-            return HTTPResponse(status: 200, body: json)
+            return HTTPResponse(status: 200, body: "", binaryBody: data, contentType: "image/png")
         }
         return HTTPResponse(status: 500, body: #"{"error":"screenshot failed"}"#)
     }
