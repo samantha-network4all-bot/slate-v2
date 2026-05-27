@@ -34,7 +34,7 @@ struct HTTPResponse {
 
 struct TestAPIRoutes {
 
-    static func handle(method: String, path: String, body: String?) -> HTTPResponse {
+    static func handle(method: String, path: String, query: String?, body: String?) -> HTTPResponse {
         switch (method, path) {
 
         case ("GET", "/healthz"):
@@ -46,9 +46,96 @@ struct TestAPIRoutes {
         case ("GET", "/screenshot"):
             return screenshotResponse()
 
+        case ("GET", "/text"):
+            return textResponse(query: query)
+
+        case ("POST", "/type"):
+            return typeResponse(body: body)
+
         default:
             return HTTPResponse(status: 404, body: #"{"error":"not found"}"#)
         }
+    }
+
+    // MARK: - Helper: parse query string
+
+    private static func parseQuery(_ query: String?) -> [String: String] {
+        guard let query = query, !query.isEmpty else { return [:] }
+        var result: [String: String] = [:]
+        let pairs = query.components(separatedBy: "&")
+        for pair in pairs {
+            let kv = pair.components(separatedBy: "=")
+            if kv.count == 2 {
+                result[kv[0]] = kv[1].removingPercentEncoding ?? kv[1]
+            }
+        }
+        return result
+    }
+
+    // MARK: - Helper: window lookup
+
+    private static func resolveController(windowId: String?) -> SlateWindowController? {
+        let controllers = DocumentController.shared.windowControllers
+        if let id = windowId, !id.isEmpty {
+            // "w1" → index 0, "w2" → index 1, etc.
+            if let indexStr = id.dropFirst().description as String?,
+               let index = Int(indexStr), index >= 1 && index <= controllers.count {
+                return controllers[index - 1]
+            }
+            return nil
+        }
+        // No windowId: use key window or first controller
+        if let key = controllers.first(where: { $0.window?.isKeyWindow == true }) {
+            return key
+        }
+        return controllers.first
+    }
+
+    // MARK: - GET /text
+
+    private static func textResponse(query: String?) -> HTTPResponse {
+        let params = parseQuery(query)
+        let result = DispatchQueue.main.sync {
+            guard let controller = resolveController(windowId: params["windowId"]) else {
+                return nil as String?
+            }
+            return controller.editor.string
+        }
+        guard let text = result else {
+            return HTTPResponse(status: 404, body: #"{"error":"window not found"}"#)
+        }
+        let jsonObj = ["text": text]
+        if let data = try? JSONSerialization.data(withJSONObject: jsonObj, options: []),
+           let json = String(data: data, encoding: .utf8) {
+            return HTTPResponse(status: 200, body: json)
+        }
+        return HTTPResponse(status: 500, body: #"{"error":"serialization"}"#)
+    }
+
+    // MARK: - POST /type
+
+    private static func typeResponse(body: String?) -> HTTPResponse {
+        guard let body = body,
+              let data = body.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
+              let text = json["text"] as? String else {
+            return HTTPResponse(status: 400, body: #"{"error":"bad request"}"#)
+        }
+        let windowId = json["windowId"] as? String
+
+        let ok = DispatchQueue.main.sync {
+            guard let controller = resolveController(windowId: windowId) else {
+                return false
+            }
+            controller.editor.string = text
+            NotificationCenter.default.post(name: NSText.didChangeNotification, object: controller.editor)
+            return true
+        }
+
+        if ok {
+            return HTTPResponse(status: 200, body: #"{"ok":true}"#)
+        }
+        return HTTPResponse(status: 404, body: #"{"error":"window not found"}"#)
     }
 
     private static func screenshotResponse() -> HTTPResponse {

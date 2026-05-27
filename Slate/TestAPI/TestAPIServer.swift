@@ -121,7 +121,9 @@ class TestAPIServer {
 
         let method = parts[0]
         let rawPath = parts[1]
-        let path = rawPath.components(separatedBy: "?").first ?? rawPath
+        let pathParts = rawPath.components(separatedBy: "?")
+        let path = pathParts.first ?? rawPath
+        let query = pathParts.count > 1 ? pathParts[1] : nil
 
         var body: String? = nil
         if let br = data.range(of: Data("\r\n\r\n".utf8)) {
@@ -131,7 +133,7 @@ class TestAPIServer {
             }
         }
 
-        return TestAPIRoutes.handle(method: method, path: path, body: body)
+        return TestAPIRoutes.handle(method: method, path: path, query: query, body: body)
     }
 
     private func writeResponse(to fd: Int32, response: HTTPResponse) {
