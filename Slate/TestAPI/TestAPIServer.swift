@@ -10,7 +10,7 @@ class TestAPIServer {
 
     static var shared = TestAPIServer()
 
-    private var listener: CFSocket?
+    private var listenerFD: Int32 = -1
     private var port: Int = 0
 
     private init() {}
@@ -23,39 +23,41 @@ class TestAPIServer {
     }
 
     private func listen() {
-        var context = CFSocketContext(
-            version: 0,
-            info: Unmanaged.passUnretained(self).toOpaque(),
-            retain: nil,
-            release: nil,
-            copyDescription: nil
-        )
+        // Create socket
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return }
+        self.listenerFD = fd
 
-        guard let sock = CFSocketCreate(kCFAllocatorDefault, PF_INET, SOCK_STREAM, IPPROTO_TCP,
-                                         CFSocketCallBackType.acceptCallBack.rawValue,
-                                         { (s, type, address, data, info) in
-                                            if let info = info {
-                                                let server = Unmanaged<TestAPIServer>.fromOpaque(info).takeUnretainedValue()
-                                                server.acceptConnection(s, address: address)
-                                            }
-                                         }, &context) else { return }
-
-        CFSocketSetSocketFlags(sock, CFSocketGetSocketFlags(sock) & ~kCFSocketCloseOnInvalidate)
+        // Allow address reuse
+        var reuse: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
 
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_port = UInt16(0).bigEndian
         addr.sin_addr = in_addr(s_addr: INADDR_LOOPBACK.bigEndian)
 
-        let addrData = Data(bytes: &addr, count: MemoryLayout<sockaddr_in>.size) as CFData
-        CFSocketSetAddress(sock, addrData)
-
-        let sockName = CFSocketCopyAddress(sock) as Data
-        sockName.withUnsafeBytes { ptr in
-            let sa = ptr.baseAddress!.assumingMemoryBound(to: sockaddr_in.self)
-            let netPort = sa.pointee.sin_port
-            self.port = Int(UInt16(bigEndian: netPort))
+        let addrSize = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bindResult = withUnsafeMutablePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                bind(fd, sa, addrSize)
+            }
         }
+        guard bindResult == 0 else { close(fd); return }
+
+        // Listen
+        guard Darwin.listen(fd, 8) == 0 else { close(fd); return }
+
+        // Get port
+        var actualAddr = sockaddr_in()
+        var actualLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let portResult = withUnsafeMutablePointer(to: &actualAddr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                getsockname(fd, sa, &actualLen)
+            }
+        }
+        guard portResult == 0 else { close(fd); return }
+        self.port = Int(UInt16(bigEndian: actualAddr.sin_port))
 
         // Write port file
         do {
@@ -67,49 +69,39 @@ class TestAPIServer {
             // no-op
         }
 
-        let runLoopSource = CFSocketCreateRunLoopSource(kCFAllocatorDefault, sock, 0)
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-        CFSocketSetSocketFlags(sock, CFSocketGetSocketFlags(sock) | kCFSocketAutomaticallyReenableAcceptCallBack)
-        listener = sock
-        CFRunLoopRun()
-    }
-
-    private func acceptConnection(_ s: CFSocket?, address: CFData?) {
-        guard let sock = s else { return }
-        let native = CFSocketGetNative(sock)
-        let client = accept(native, nil, nil)
-        if client < 0 { return }
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.handleClient(client)
+        // Accept loop
+        while true {
+            let client = accept(fd, nil, nil)
+            if client < 0 { break }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.handleClient(client)
+            }
         }
     }
 
     private func handleClient(_ fd: Int32) {
         defer { close(fd) }
 
-        let fileHandle = FileHandle(fileDescriptor: fd, closeOnDealloc: false)
-        guard let data = readRequest(from: fileHandle) else { close(fd); return }
-
-        let response = routeRequest(data)
-        writeResponse(to: fd, response: response)
-    }
-
-    private func readRequest(from handle: FileHandle) -> Data? {
+        // Read request data using low-level read
         var buffer = Data()
-        while true {
-            if let chunk = try? handle.read(upToCount: 4096) {
-                if chunk.count == 0 { break }
-                buffer.append(chunk)
-                if buffer.count > 65536 { break }
-                if let range = buffer.range(of: Data("\r\n\r\n".utf8)) {
-                    return Data(buffer.prefix(through: range.upperBound - 1))
-                }
-            } else {
+        var tempBuf = [UInt8](repeating: 0, count: 4096)
+        let delimiter = Data("\r\n\r\n".utf8)
+
+        while buffer.count <= 65536 {
+            let bytesRead = tempBuf.withUnsafeMutableBytes { ptr in
+                read(fd, ptr.baseAddress, 4096)
+            }
+            if bytesRead <= 0 { break }
+            buffer.append(contentsOf: tempBuf.prefix(Int(bytesRead)))
+            if buffer.range(of: delimiter) != nil {
                 break
             }
         }
-        return buffer.isEmpty ? nil : buffer
+
+        guard !buffer.isEmpty else { return }
+
+        let response = routeRequest(buffer)
+        writeResponse(to: fd, response: response)
     }
 
     private func routeRequest(_ data: Data) -> HTTPResponse {

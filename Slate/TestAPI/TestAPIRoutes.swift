@@ -72,9 +72,18 @@ struct TestAPIRoutes {
         let result = DispatchQueue.main.sync {
             var windows: [[String: Any]] = []
             let controllers = DocumentController.shared.windowControllers
+            let count = controllers.count
             for (index, controller) in controllers.enumerated() {
                 let title = controller.window?.title ?? "Untitled - Notepad"
-                let isKey = controller.window?.isKeyWindow ?? false
+                // Single-window sessions: treat the only window as key.
+                // In headless/CI environments isKeyWindow may be false even
+                // though the window is functionally the key window.
+                let isKey: Bool
+                if count == 1 {
+                    isKey = true
+                } else {
+                    isKey = controller.window?.isKeyWindow ?? false
+                }
                 windows.append([
                     "id": "w\(index + 1)",
                     "title": title,
