@@ -144,11 +144,14 @@ struct TestAPIRoutes {
     // MARK: - POST /shutdown
 
     private static func shutdownResponse() -> HTTPResponse {
-        // Remove port file synchronously so the harness detects the process
-        // has exited before we even send the response.
+        // Remove port file synchronously so the harness detects the
+        // process has exited before we even send the response.
         try? FileManager.default.removeItem(atPath: testAPIPortFilePath)
-        // Schedule termination after a brief delay so the response is
-        // fully written and the client receives it before the process exits.
+        // Stop the listener so no new connections are accepted.
+        TestAPIServer.shared.stop()
+        // Schedule termination on the main queue after a brief delay
+        // so the response is fully written and the client receives it
+        // before the process exits.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             NSApp.terminate(nil)
         }

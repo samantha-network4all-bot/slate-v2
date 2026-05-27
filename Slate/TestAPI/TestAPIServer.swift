@@ -14,6 +14,7 @@ class TestAPIServer {
 
     private var listenerFD: Int32 = -1
     private var port: Int = 0
+    private var running = false
 
     private init() {}
 
@@ -71,13 +72,30 @@ class TestAPIServer {
             // no-op
         }
 
+        running = true
+
         // Accept loop
-        while true {
+        while running {
             let client = accept(fd, nil, nil)
             if client < 0 { break }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.handleClient(client)
             }
+        }
+
+        if listenerFD >= 0 {
+            close(listenerFD)
+            listenerFD = -1
+        }
+        running = false
+    }
+
+    func stop() {
+        running = false
+        if listenerFD >= 0 {
+            let fd = listenerFD
+            listenerFD = -1
+            close(fd)
         }
     }
 
