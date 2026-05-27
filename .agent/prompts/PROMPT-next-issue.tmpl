@@ -42,7 +42,40 @@ user-visible vertical slice that advances the product.
 4. **No invented PRD content**. If the next reasonable behavior
    isn't in the PRD, return `{"done": true}`.
 5. **Each issue gets exactly one DoD section** with concrete
-   probes — never "user can click and it feels right".
+   HTTP probes — never "user can click and it feels right" and
+   never shell commands.
+
+## Acceptance schema (STRICT — the runner parses this)
+
+The `acceptance:` block embedded in the issue body MUST be exactly
+this shape:
+
+```json
+{
+  "acceptance": [
+    {
+      "step": "human-label-for-this-probe",
+      "calls": [
+        { "method": "GET",  "path": "/healthz", "expect": {"ok": true} },
+        { "method": "POST", "path": "/type",    "body":   {"text": "hello"} },
+        { "method": "GET",  "path": "/text",    "expect": {"text": "hello"} }
+      ]
+    }
+  ]
+}
+```
+
+Rules:
+- `acceptance` is an array of objects.
+- Each object has a `step` string and a `calls` array
+  (always plural, even if length 1).
+- Each call has `method` (uppercase) and `path` (starts with `/`).
+- `body` is JSON; the runner posts it as `application/json`.
+- `expect` is JSON; the runner checks that every key in `expect`
+  appears in the response with an equal value (partial match).
+- Do **not** include `command:` or any shell step. Build / launch
+  / shutdown are handled by the orchestrator outside the
+  `acceptance` block.
 
 ## Output
 

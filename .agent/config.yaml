@@ -13,7 +13,7 @@ paths:
 
 llm:
   cli: pi                 # or "claude"
-  mode: json
+  model: openrouter/owl-alpha
   tools: read,bash,edit,write,grep,find,ls
 
 loop:
