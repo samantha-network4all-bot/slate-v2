@@ -52,6 +52,9 @@ struct TestAPIRoutes {
         case ("POST", "/type"):
             return typeResponse(body: body)
 
+        case ("POST", "/shutdown"):
+            return shutdownResponse()
+
         default:
             return HTTPResponse(status: 404, body: #"{"error":"not found"}"#)
         }
@@ -136,6 +139,15 @@ struct TestAPIRoutes {
             return HTTPResponse(status: 200, body: #"{"ok":true}"#)
         }
         return HTTPResponse(status: 404, body: #"{"error":"window not found"}"#)
+    }
+
+    // MARK: - POST /shutdown
+
+    private static func shutdownResponse() -> HTTPResponse {
+        DispatchQueue.main.async {
+            NSApp.terminate(nil)
+        }
+        return HTTPResponse(status: 200, body: #"{"ok":true}"#)
     }
 
     private static func screenshotResponse() -> HTTPResponse {
