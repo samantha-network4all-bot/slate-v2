@@ -28,6 +28,16 @@ targets:
       - Slate/TestAPI/TestAPIRoutes.swift
     info:
       path: Slate/Info.plist
+      properties:
+        CFBundleDisplayName: Slate
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Plain Text
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.plain-text
+            CFBundleTypeExtensions:
+              - txt
     settings:
       PRODUCT_NAME: Slate
       PRODUCT_BUNDLE_IDENTIFIER: com.bimboware.slate

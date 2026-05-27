@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 // MARK: - HTTPResponse
 
@@ -33,9 +34,30 @@ struct TestAPIRoutes {
         case ("GET", "/windows"):
             return windowsResponse()
 
+        case ("GET", "/screenshot"):
+            return screenshotResponse(body: body)
+
         default:
             return HTTPResponse(status: 404, body: #"{"error":"not found"}"#)
         }
+    }
+
+    private static func screenshotResponse(body: String?) -> HTTPResponse {
+        var pngData: Data?
+        DispatchQueue.main.sync {
+            guard let controller = DocumentController.shared.windowControllers.first else { return }
+            guard let view = controller.window?.contentView else { return }
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            pngData = rep.representation(using: .png, properties: [:])
+        }
+
+        if let data = pngData {
+            let encoded = data.base64EncodedString()
+            let json = "{\"ok\":true,\"image\":\"" + encoded + "\"}"
+            return HTTPResponse(status: 200, body: json)
+        }
+        return HTTPResponse(status: 500, body: #"{"error":"screenshot failed"}"#)
     }
 
     private static func windowsResponse() -> HTTPResponse {

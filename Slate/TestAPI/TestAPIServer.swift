@@ -128,7 +128,8 @@ class TestAPIServer {
         }
 
         let method = parts[0]
-        let path = parts[1]
+        let rawPath = parts[1]
+        let path = rawPath.components(separatedBy: "?").first ?? rawPath
 
         var body: String? = nil
         if let br = data.range(of: Data("\r\n\r\n".utf8)) {
