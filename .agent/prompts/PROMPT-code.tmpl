@@ -54,6 +54,17 @@ acceptance probes pass.
 6. **No `osascript`, `CGEvent`, `AXUIElement` in app code.** Those
    belong to the obsolete pre-Slate harness. Verification flows
    exclusively through the HTTP test API.
+7. **`/screenshot` must keep working.** The orchestrator captures a
+   PNG via `GET /screenshot` after every iteration and attaches it
+   to the GitHub issue as visual proof of progress. PRD §7.6 and
+   §8.13 spell out the required implementation
+   (`contentView.bitmapImageRepForCachingDisplay` →
+   `cacheDisplay(in:to:)` → `representation(using: .png)`). If your
+   slice changes the window's view hierarchy or replaces the
+   contentView, update the `/screenshot` handler so it captures the
+   new view. Never reach for `CGWindowListCreateImage` or
+   `screencapture` — those require Screen-Recording permission and
+   will fail silently in CI.
 
 ## Workflow
 

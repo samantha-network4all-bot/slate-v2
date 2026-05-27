@@ -447,6 +447,7 @@ Every endpoint returns JSON unless noted. Errors return
 | POST   | `/openFile`      | `{"path":"/abs/path.txt"}`          | `{"ok":true,"windowId":"w2"}` | Open a file by URL, bypassing NSOpenPanel |
 | POST   | `/saveAs`        | `{"windowId":"w1","path":"/abs/path.txt","encoding":"UTF-8","lineEnding":"LF"}` | `{"ok":true}` | Save bypassing NSSavePanel |
 | POST   | `/shutdown`      | —                                   | `{"ok":true}` | `NSApp.terminate(nil)` after responding |
+| GET    | `/screenshot`    | query `?windowId=w1` (optional)     | `image/png` bytes | PNG snapshot of the window's contentView. MUST be implementable without macOS Screen-Recording / Accessibility / TCC permission. See §7.6. |
 
 Notes:
 - `/type` appends at the editor's current selection (replacing if
@@ -482,6 +483,32 @@ The listener binds only to `127.0.0.1` and accepts no auth.
 `SLATE_TEST_API=1` is opt-in. Release builds shipped to end users
 should set this off (it's an env var, not a build flag, so even a
 shipped binary stays inert by default).
+
+### 7.6 Self-screenshot
+
+`/screenshot` renders the target window's contentView into a PNG
+using **only in-process drawing APIs**. The required path is:
+
+```swift
+guard let win = lookupWindow(id) else { /* 404 */ }
+let view = win.contentView!
+let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+view.cacheDisplay(in: view.bounds, to: rep)
+let png = rep.representation(using: .png, properties: [:])!
+// respond with Content-Type: image/png
+```
+
+It MUST NOT call:
+
+- `CGWindowListCreateImage`
+- `CGDisplayCreateImage`
+- `NSScreen`-pixel-grab APIs
+- shell out to `screencapture`
+
+Any of those require Screen-Recording or Accessibility permission,
+which the old `notepad/` project taught us silently degrades to
+no-op when not granted. /screenshot must work the moment
+`SLATE_TEST_API=1` is set, with zero permission prompts.
 
 ---
 
@@ -561,6 +588,17 @@ violation blocks the PR.
 - Test API handlers run on a background queue; when they need
   to touch AppKit they use `DispatchQueue.main.sync`. Never call
   AppKit from the background queue directly.
+
+### 8.13 Self-screenshot only
+- `/screenshot` uses only in-process drawing APIs
+  (`NSView.bitmapImageRepForCachingDisplay` →
+  `NSView.cacheDisplay(in:to:)` → `NSBitmapImageRep.representation(using:.png)`).
+- Any code path that reaches `CGWindowListCreateImage`,
+  `CGDisplayCreateImage`, `screencapture`, or any API requiring
+  Screen Recording / Accessibility / TCC permission fails review.
+- The endpoint MUST work the first time `SLATE_TEST_API=1` is set
+  on a freshly installed machine — no permission prompts, no
+  silent degradation.
 
 ---
 
