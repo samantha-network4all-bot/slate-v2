@@ -1,0 +1,37 @@
+# builder config for the Slate project.
+# Consumed by github.com/samantha-network4all-bot/007-builder
+
+project:
+  name: slate
+  repo: samantha-network4all-bot/slate-v2
+
+paths:
+  prd: PRD.md
+  lessons: lessons-learned.md
+  prompts: .agent/prompts
+  state: .slate
+
+llm:
+  cli: pi                 # or "claude"
+  mode: json
+  tools: read,bash,edit,write,grep,find,ls
+
+loop:
+  attempts_per_issue: 10
+  hitl_label: awaiting-human-review
+  slice_label: slice
+  attempt_label_prefix: "attempt:"
+
+feature_test:
+  # The runner exports this env var when launching the built binary so
+  # the test API listener turns on.
+  enable_env: SLATE_TEST_API=1
+  # File the app writes its chosen port to before accepting connections.
+  port_file: ~/Library/Application Support/Slate/test-api.port
+  build:
+    - xcodegen generate
+    - xcodebuild -scheme Slate -configuration Debug -derivedDataPath build/ build
+  binary: build/Build/Products/Debug/Slate.app/Contents/MacOS/Slate
+  shutdown_endpoint: /shutdown
+  healthz_endpoint: /healthz
+  healthz_timeout_seconds: 10
