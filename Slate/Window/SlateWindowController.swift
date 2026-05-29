@@ -45,13 +45,13 @@ final class SlateWindowController: NSWindowController {
     private func registerTestAPIRoutes() {
         TestAPIRouter.shared.get(prefix: "window", path: "/list") { [weak self] _ in
             guard let self, let window = self.window else {
-                return .ok(json: Data("[]".utf8))
+                return .ok(json: Data("{}".utf8))
             }
             var result = Data()
             DispatchQueue.main.sync {
                 let title = "Untitled - Notepad"
                 let isKey = window.isKeyWindow
-                let obj = [["title": title, "isKey": isKey]]
+                let obj: [String: Any] = ["0": ["title": title, "isKey": isKey]]
                 result = try! JSONSerialization.data(withJSONObject: obj)
             }
             return .ok(json: result)
