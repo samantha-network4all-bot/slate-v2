@@ -5,6 +5,7 @@ final class AppController: NSObject {
     var windowController: SlateWindowController?
 
     func launch() {
+        NSApp.activate(ignoringOtherApps: true)
         let wc = SlateWindowController()
         windowController = wc
         wc.showWindow(nil)
