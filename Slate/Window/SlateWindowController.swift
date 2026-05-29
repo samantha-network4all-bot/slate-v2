@@ -53,7 +53,7 @@ final class SlateWindowController: NSWindowController {
                 let title = "Untitled - Notepad"
                 let isKey = window.isKeyWindow
                 let obj: [String: [String: Any]] = ["0": ["title": title, "isKey": isKey]]
-                result = try! JSONSerialization.data(withJSONObject: obj)
+                if let d = try? JSONSerialization.data(withJSONObject: obj) { result = d }
             }
             return .ok(json: result)
         }
