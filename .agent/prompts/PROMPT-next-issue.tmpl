@@ -28,6 +28,18 @@ user-visible vertical slice that advances the product.
 </files>
 ```
 
+## Closed titles (DO NOT re-propose)
+
+The following issue titles are already closed. Do NOT return a slice
+whose title matches or is a near-duplicate of any of these. If the
+only reasonable next slice looks like one of these, return
+`{"done": true}` instead.
+
+```
+{{range .ClosedTitles}}- {{.}}
+{{end}}
+```
+
 ## Rules for the next slice
 
 1. **Smallest possible vertical**. "Window appears" is one slice.
