@@ -52,7 +52,7 @@ final class SlateWindowController: NSWindowController {
             DispatchQueue.main.sync {
                 let title = "Untitled - Notepad"
                 let isKey = window.isKeyWindow
-                let obj: [String: [String: Any]] = ["0": ["title": title, "isKey": isKey]]
+                let obj: [[String: Any]] = [["title": title, "isKey": isKey]]
                 result = try! JSONSerialization.data(withJSONObject: obj)
             }
             return .ok(json: result)
