@@ -15,6 +15,13 @@ llm:
   cli: pi                 # or "claude"
   model: openrouter/owl-alpha
   tools: read,bash,edit,write,grep,find,ls
+  caveman: true           # prepend a "no monologues" directive to every prompt
+
+skills:
+  code:
+    - .agent/skills/mvc-appkit.md
+  review:
+    - .agent/skills/thermo-nuclear.md
 
 loop:
   attempts_per_issue: 10

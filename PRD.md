@@ -432,33 +432,60 @@ HTTP. It does not call `osascript`, `CGEvent`, or `AXUIElement`.
 
 ### 7.3 Required endpoints
 
+Endpoints are **organised by the controller that owns them**
+(see [`.agent/skills/mvc-appkit.md`](./.agent/skills/mvc-appkit.md)).
+Every route lives under `/<controller-prefix>/<action>`. The only
+top-level exception is `/healthz`, which is registered by
+`AppController` for historical reasons.
+
 Every endpoint returns JSON unless noted. Errors return
 `{"error":"message"}` with the appropriate 4xx/5xx status.
 
-| Method | Path             | Body                                | Response | Purpose |
-|--------|------------------|-------------------------------------|----------|---------|
-| GET    | `/healthz`       | —                                   | `{"ok":true}` | Readiness probe |
-| GET    | `/windows`       | —                                   | `[{"id":"w1","title":"Untitled - Notepad","isKey":true}]` | Window inventory |
-| POST   | `/type`          | `{"text":"hello\n","windowId":"w1"}`| `{"ok":true}` | Insert at the focused editor's caret in the named window (or the key window if `windowId` omitted) |
-| GET    | `/text`          | query `?windowId=w1`                | `{"text":"hello\n"}` | Read the editor's contents |
-| POST   | `/menu`          | `{"path":["File","Open"]}`          | `{"ok":true}` | Invoke a menu item by title path (case-sensitive) |
-| POST   | `/shortcut`      | `{"keys":"cmd+s"}`                  | `{"ok":true}` | Synthesise the same code path the keyboard monitor triggers (notification post), NOT a CGEvent |
-| GET    | `/state`         | query `?windowId=w1`                | `{"isDirty":true,"encoding":"UTF-8","lineEnding":"CRLF","zoom":100,"selection":{"location":0,"length":0}}` | Status-bar mirror |
-| POST   | `/openFile`      | `{"path":"/abs/path.txt"}`          | `{"ok":true,"windowId":"w2"}` | Open a file by URL, bypassing NSOpenPanel |
-| POST   | `/saveAs`        | `{"windowId":"w1","path":"/abs/path.txt","encoding":"UTF-8","lineEnding":"LF"}` | `{"ok":true}` | Save bypassing NSSavePanel |
-| POST   | `/shutdown`      | —                                   | `{"ok":true}` | `NSApp.terminate(nil)` after responding |
-| GET    | `/screenshot`    | query `?windowId=w1` (optional)     | `image/png` bytes | PNG snapshot of the window's contentView. MUST be implementable without macOS Screen-Recording / Accessibility / TCC permission. See §7.6. |
+#### App (`AppController`)
 
-Notes:
-- `/type` appends at the editor's current selection (replacing if
-  any). It does NOT simulate per-character key events; it modifies
-  text storage and posts `NSText.didChangeNotification`.
-- `/menu` walks `NSApp.mainMenu`. For separators or disabled items
-  it returns 409 with a reason.
-- `/shortcut` invokes the same handler closure that
-  `KeyboardShortcuts.handleKeyEvent` would invoke for that key
-  combo; this is how we test that the shortcut wiring exists
-  without involving the OS event queue.
+| Method | Path           | Body | Response       | Purpose |
+|--------|----------------|------|----------------|---------|
+| GET    | `/healthz`     | —    | `{"ok":true}`  | Readiness probe |
+| POST   | `/app/shutdown`| —    | `{"ok":true}`  | `NSApp.terminate(nil)` after responding |
+
+#### Window (`WindowController`)
+
+| Method | Path                  | Body / Query                            | Response | Purpose |
+|--------|-----------------------|-----------------------------------------|----------|---------|
+| GET    | `/window/list`        | —                                       | `[{"id":"w1","title":"Untitled - Notepad","isKey":true}]` | Window inventory |
+| GET    | `/window/screenshot`  | query `?windowId=w1` (optional)         | `image/png` bytes | PNG of contentView. In-process only. See §7.6 + §8.13. |
+
+#### Editor (`EditorController`)
+
+| Method | Path           | Body / Query                            | Response | Purpose |
+|--------|----------------|-----------------------------------------|----------|---------|
+| GET    | `/editor/text` | query `?windowId=w1`                    | `{"text":"hello\n"}` | Read editor contents |
+| POST   | `/editor/type` | `{"text":"hello\n","windowId":"w1"}`    | `{"ok":true}` | Insert at current selection (replaces if any). Modifies text storage and posts `NSText.didChangeNotification`. No synthetic key events. |
+| GET    | `/editor/state`| query `?windowId=w1`                    | `{"isDirty":true,"encoding":"UTF-8","lineEnding":"CRLF","zoom":100,"selection":{"location":0,"length":0}}` | Editor/document state mirror |
+
+#### Document (`DocumentController`)
+
+| Method | Path                | Body                                                          | Response | Purpose |
+|--------|---------------------|---------------------------------------------------------------|----------|---------|
+| POST   | `/document/openFile`| `{"path":"/abs/path.txt"}`                                    | `{"ok":true,"windowId":"w2"}` | Open file, bypass NSOpenPanel |
+| POST   | `/document/saveAs`  | `{"windowId":"w1","path":"/abs/path.txt","encoding":"UTF-8","lineEnding":"LF"}` | `{"ok":true}` | Save, bypass NSSavePanel |
+
+#### Menu (`MenuController`)
+
+| Method | Path           | Body                          | Response | Purpose |
+|--------|----------------|-------------------------------|----------|---------|
+| POST   | `/menu/invoke` | `{"path":["File","Open"]}`    | `{"ok":true}` | Invoke a menu item by title path. Walks `NSApp.mainMenu`. Returns 409 on separators or disabled items. |
+
+#### Shortcut (`ShortcutController`)
+
+| Method | Path             | Body                | Response | Purpose |
+|--------|------------------|---------------------|----------|---------|
+| POST   | `/shortcut/press`| `{"keys":"cmd+s"}`  | `{"ok":true}` | Invoke the same handler closure `KeyboardShortcuts.handleKeyEvent` would; NOT a CGEvent. |
+
+New controllers MAY add new prefixes. New behavior MUST NOT be
+added as a top-level route — it must belong to a controller. The
+quality-review (PRD §8 + the thermo-nuclear skill) will block PRs
+that add top-level routes.
 
 ### 7.4 Per-issue contract
 Every `slice` issue's body includes an `acceptance:` JSON block
@@ -590,7 +617,7 @@ violation blocks the PR.
   AppKit from the background queue directly.
 
 ### 8.13 Self-screenshot only
-- `/screenshot` uses only in-process drawing APIs
+- `/window/screenshot` uses only in-process drawing APIs
   (`NSView.bitmapImageRepForCachingDisplay` →
   `NSView.cacheDisplay(in:to:)` → `NSBitmapImageRep.representation(using:.png)`).
 - Any code path that reaches `CGWindowListCreateImage`,
@@ -599,6 +626,27 @@ violation blocks the PR.
 - The endpoint MUST work the first time `SLATE_TEST_API=1` is set
   on a freshly installed machine — no permission prompts, no
   silent degradation.
+
+### 8.14 Controller owns its routes (MVC)
+- Every user-visible feature lives in an `NSViewController` subclass
+  under `Slate/<Feature>/<Name>Controller.swift`.
+- That controller MUST register its own HTTP test-API routes by
+  conforming to `TestAPIControllerRoutes` and calling
+  `TestAPIRouter.shared.register(controller: self)` in `viewDidLoad`.
+- Route handlers live in an extension on the controller in the same
+  file. They do NOT live under `Slate/App/TestAPI/Routes/*.swift` or
+  any other shared route file.
+- Views (`NSView` subclasses) MUST NOT reference `TestAPIRouter`,
+  `URLSession`, or any HTTP type. Views render the model and forward
+  gestures only.
+- Models (plain Swift types) MUST NOT `import AppKit`.
+- New endpoints MUST be namespaced under their controller's prefix
+  (`/<prefix>/<action>`). Top-level routes are forbidden except for
+  the legacy `/healthz`.
+- The full pattern, including a canonical controller scaffold and the
+  required-endpoints table by controller, lives in
+  `.agent/skills/mvc-appkit.md`. The code-quality review enforces it
+  mechanically.
 
 ---
 
