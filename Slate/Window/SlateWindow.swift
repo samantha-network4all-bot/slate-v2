@@ -14,7 +14,7 @@ final class SlateWindow: NSWindow {
         self.isMovableByWindowBackground = false
         self.backgroundColor = Colors.chromeBackground
 
-        let contentView = NSView(frame: self.contentRect(forFrameRect: self.frame))
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: Metrics.defaultWindowSize.width, height: Metrics.defaultWindowSize.height))
         contentView.wantsLayer = true
         contentView.layer?.backgroundColor = NSColor.white.cgColor
         self.contentView = contentView

@@ -29,8 +29,8 @@ final class SlateWindowController: NSWindowController {
     }
 
     private func positionWindowTopRight(_ window: NSWindow) {
-        let screen = NSScreen.main
-        let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 600, width: Metrics.defaultWindowSize.width, height: Metrics.defaultWindowSize.height)
+        guard let screen = NSScreen.main else { return }
+        let visibleFrame = screen.visibleFrame
 
         let x = visibleFrame.maxX - Metrics.defaultWindowSize.width
         let y = visibleFrame.maxY - Metrics.defaultWindowSize.height
@@ -47,10 +47,14 @@ final class SlateWindowController: NSWindowController {
             guard let self, let window = self.window else {
                 return .ok(json: Data("[]".utf8))
             }
-            let title = window.title
-            let isKey = window.isKeyWindow
-            let json = #"[{"title":"\#(title)","isKey":\#(isKey)}]}"#
-            return .ok(json: Data(json.utf8))
+            var result = Data()
+            DispatchQueue.main.sync {
+                let title = "Untitled - Notepad"
+                let isKey = window.isKeyWindow
+                let obj = [["title": title, "isKey": isKey]]
+                result = try! JSONSerialization.data(withJSONObject: obj)
+            }
+            return .ok(json: result)
         }
 
         TestAPIRouter.shared.get(prefix: "window", path: "/screenshot") { [weak self] _ in
@@ -58,17 +62,16 @@ final class SlateWindowController: NSWindowController {
                   let view = window.contentView else {
                 return .notFound()
             }
+            var pngData: Data?
             DispatchQueue.main.sync {
-                // no-op, already on main
+                guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                pngData = rep.representation(using: .png, properties: [:])
             }
-            guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
-                return .badRequest("bitmap create failed")
+            guard let data = pngData else {
+                return .badRequest("screenshot failed")
             }
-            view.cacheDisplay(in: view.bounds, to: rep)
-            guard let pngData = rep.representation(using: .png, properties: [:]) else {
-                return .badRequest("png encode failed")
-            }
-            return TestAPIResponse(status: 200, headers: ["Content-Type": "image/png"], body: pngData)
+            return TestAPIResponse(status: 200, headers: ["Content-Type": "image/png"], body: data)
         }
     }
 }
